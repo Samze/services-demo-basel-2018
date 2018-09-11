@@ -1,0 +1,8 @@
+---
+applications:
+- name: worker-app
+  memory: 256M
+  instances: 1
+  buildpacks:
+    - binary_buildpack
+  command: ./worker-app

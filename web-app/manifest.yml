@@ -1,0 +1,7 @@
+---
+applications:
+- name: web-app
+  memory: 256M
+  buildpacks:
+    - binary_buildpack
+  command: ./web-app
