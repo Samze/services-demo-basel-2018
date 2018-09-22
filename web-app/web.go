@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"html"
@@ -17,6 +18,7 @@ import (
 
 type Storer interface {
 	GetProcessedText() ([]string, error)
+	GetProcessedImages() ([][]byte, error)
 }
 
 const (
@@ -177,19 +179,30 @@ func postHandler(t *pubsub.Topic) func(w http.ResponseWriter, r *http.Request) {
 
 func getHandler(t Storer) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		texts, err := t.GetProcessedText()
-		if err != nil {
-		}
-
 		fmt.Fprintf(w, "<!doctype html><form method='POST' action='/publish'>"+
 			"<input required name='message' placeholder='Message'>"+
 			"<input type='submit' value='Publish'>"+
 			"</form>")
+
+		texts, err := t.GetProcessedText()
+		if err != nil {
+			fmt.Fprintf(w, "err getting text %+v", err)
+		}
 
 		fmt.Fprintln(w, "<ul>")
 		for _, text := range texts {
 			fmt.Fprintln(w, "<li>", html.EscapeString(string(text)), "</li>")
 		}
 		fmt.Fprintln(w, "</ul>")
+
+		images, err := t.GetProcessedImages()
+		if err != nil {
+			fmt.Fprintf(w, "err getting images %+v", err)
+		}
+
+		for _, img := range images {
+			encodedImg := base64.StdEncoding.EncodeToString(img)
+			fmt.Fprintln(w, `<img src="data:image/png;base64,`, encodedImg, `">`)
+		}
 	}
 }

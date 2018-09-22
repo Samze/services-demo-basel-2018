@@ -31,6 +31,12 @@ func (s *Store) createTables() error {
 	CREATE TABLE IF NOT EXISTS text(
 		text varchar(255) PRIMARY KEY
 	)`)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = s.db.Query(`CREATE TABLE IF NOT EXISTS images (imgname text, img bytea)`)
 	return err
 }
 

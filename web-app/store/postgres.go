@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"io/ioutil"
 
 	_ "github.com/lib/pq"
 )
@@ -27,9 +28,13 @@ func NewStore(conn string) (*Store, error) {
 }
 
 func (s *Store) createTables() error {
-	// temp
+	// temp drop everything while for testing
 	s.db.Query(`
 	DROP TABLE text
+	`)
+
+	s.db.Query(`
+	DROP TABLE images
 	`)
 
 	_, err := s.db.Query(`
@@ -40,7 +45,12 @@ func (s *Store) createTables() error {
 		return err
 	}
 
-	// temp
+	_, err = s.db.Query(`CREATE TABLE IF NOT EXISTS images (imgname text, img bytea)`)
+	if err != nil {
+		return err
+	}
+
+	// temp some random data
 	_, err = s.db.Query(`
 	INSERT INTO text VALUES ('dummydata')
 	`)
@@ -48,7 +58,39 @@ func (s *Store) createTables() error {
 		return err
 	}
 
+	img, err := ioutil.ReadFile("osbapi.png")
+	if err != nil {
+		return err
+	}
+
+	sqlStatement := "INSERT INTO images VALUES ($1, $2)"
+	_, err = s.db.Exec(sqlStatement, "test", img)
+	if err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func (s *Store) GetProcessedImages() ([][]byte, error) {
+	rows, err := s.db.Query("SELECT img FROM images")
+	if err != nil {
+		return nil, err
+	}
+
+	var result [][]byte
+
+	for rows.Next() {
+		var img []byte
+		err := rows.Scan(&img)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, img)
+	}
+
+	return result, nil
 }
 
 func (s *Store) GetProcessedText() ([]string, error) {
