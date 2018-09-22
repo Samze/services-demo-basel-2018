@@ -13,93 +13,114 @@ import (
 )
 
 const (
-	port               = "8080"
-	gcpProjectEnvName  = "GOOGLE_CLOUD_PROJECT"
-	pubsubTopicEnvName = "PUBSUB_TOPIC"
+	port = "8080"
 )
 
-var topic *pubsub.Topic
-
 func main() {
-	ctx := context.Background()
-
-	appEnv, err := cfenv.Current()
+	key, projectID, topicID, err := parseVCAPServices()
 	if err != nil {
-		log.Fatalf("Couldn't find env %+v", err)
+		log.Fatalf("could not parse env %+v", err)
 	}
 
-	service, err := appEnv.Services.WithName("pubsub")
+	tmpFile, err := writeGCPKeyfile(key)
 	if err != nil {
-		log.Fatalf("Couldn't find env %+v", err)
+		log.Fatalf("could not write gcp file")
 	}
 
-	projectID, ok := service.CredentialString("projectId")
-	if !ok {
-		log.Fatalf("Couldn't find project id %+v", ok)
-	}
+	os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", tmpFile.Name())
+	defer os.Remove(tmpFile.Name())
 
-	topicId, ok := service.CredentialString("topicId")
-	if !ok {
-		log.Fatalf("Couldn't find topic id %+v", ok)
-	}
-
-	key, ok := service.CredentialString("privateKeyData")
-	if !ok {
-		log.Fatalf("Couldn't find key i%+v", ok)
-	}
-
-	content := []byte(key)
-	tmpfile, err := ioutil.TempFile("", "key")
+	topic, err := setupTopic(projectID, topicID)
 	if err != nil {
-		log.Fatal(err)
-	}
-	if _, err := tmpfile.Write(content); err != nil {
-		log.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		log.Fatal(err)
+		log.Fatalf("could not setup topic %+v", err)
 	}
 
-	defer os.Remove(tmpfile.Name())
-
-	os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", tmpfile.Name())
-
-	client, err := pubsub.NewClient(ctx, projectID)
-	if err != nil {
-		log.Fatalf("Failed to create client: %v", err)
-	}
-	log.Println("Created client")
-
-	topic = client.Topic(topicId)
-
-	// The topic existence test requires the binding to have the 'viewer' role.
-	ok, err = topic.Exists(ctx)
-	if err != nil {
-		log.Fatalf("Error finding topic: %v", err)
-	}
-	if !ok {
-		log.Fatalf("Couldn't find topic %v", topic)
-	}
 	defer topic.Stop()
 
 	http.HandleFunc("/", getHandler)
-	http.HandleFunc("/publish", postHandler)
+	http.HandleFunc("/publish", postHandler(topic))
 
 	log.Println("Listening on port:", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", port), nil))
 }
 
-func postHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	message := r.FormValue("message")
-	result := topic.Publish(ctx, &pubsub.Message{Data: []byte(message)})
-	serverID, err := result.Get(ctx)
+func parseVCAPServices() (key, projectID, topicID string, err error) {
+	appEnv, err := cfenv.Current()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to publish: %v", err), http.StatusInternalServerError)
-		return
+		return key, projectID, topicID, err
 	}
-	log.Printf("Published message ID=%s", serverID)
-	http.Redirect(w, r, "/", http.StatusFound)
+
+	service, err := appEnv.Services.WithName("pubsub")
+	if err != nil {
+		return key, projectID, topicID, err
+	}
+
+	key, ok := service.CredentialString("privateKeyData")
+	if !ok {
+		return key, projectID, topicID, err
+	}
+
+	projectID, ok = service.CredentialString("projectId")
+	if !ok {
+		return key, projectID, topicID, err
+	}
+
+	topicID, ok = service.CredentialString("topicId")
+	if !ok {
+		return key, projectID, topicID, err
+	}
+
+	return key, projectID, topicID, nil
+}
+
+func writeGCPKeyfile(key string) (*os.File, error) {
+	content := []byte(key)
+	tmpFile, err := ioutil.TempFile("", "key")
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tmpFile.Write(content); err != nil {
+		return nil, err
+	}
+	if err := tmpFile.Close(); err != nil {
+		return nil, err
+	}
+	return tmpFile, nil
+}
+
+func setupTopic(projectID, topicID string) (*pubsub.Topic, error) {
+	ctx := context.Background()
+	client, err := pubsub.NewClient(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to create client: %v", err)
+	}
+	log.Println("Created client")
+
+	topic := client.Topic(topicID)
+
+	ok, err := topic.Exists(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("Error finding topic: %v", err)
+	}
+	if !ok {
+		return nil, fmt.Errorf("Couldn't find topic %v", topic)
+	}
+	return topic, nil
+}
+
+func postHandler(t *pubsub.Topic) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		message := r.FormValue("message")
+		result := t.Publish(ctx, &pubsub.Message{Data: []byte(message)})
+		serverID, err := result.Get(ctx)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to publish: %v", err), http.StatusInternalServerError)
+			return
+		}
+		log.Printf("Published message ID=%s", serverID)
+		http.Redirect(w, r, "/", http.StatusFound)
+	}
 }
 
 func getHandler(w http.ResponseWriter, r *http.Request) {
