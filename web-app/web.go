@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"html"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -15,7 +16,7 @@ import (
 )
 
 type Storer interface {
-	GetProcessedText() string
+	GetProcessedText() ([]string, error)
 }
 
 const (
@@ -53,10 +54,13 @@ func main() {
 		log.Fatalf("Could not connect to store %+v", err)
 	}
 
-	s := store.GetProcessedText()
+	s, err := store.GetProcessedText()
+	if err != nil {
+		log.Fatalf("Could not get text %+v", err)
+	}
 	fmt.Println(s)
 
-	http.HandleFunc("/", getHandler)
+	http.HandleFunc("/", getHandler(store))
 	http.HandleFunc("/publish", postHandler(topic))
 
 	fmt.Println("Listening on port:", port)
@@ -85,8 +89,8 @@ func parsePostgresEnv() (conn string, err error) {
 		return conn, fmt.Errorf("could not load uri")
 	}
 	return conn, err
-
 }
+
 func parsePubSubEnv() (key, projectID, topicID string, err error) {
 	appEnv, err := cfenv.Current()
 	if err != nil {
@@ -171,9 +175,21 @@ func postHandler(t *pubsub.Topic) func(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "<!doctype html><form method='POST' action='/publish'>"+
-		"<input required name='message' placeholder='Message'>"+
-		"<input type='submit' value='Publish'>"+
-		"</form>")
+func getHandler(t Storer) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		texts, err := t.GetProcessedText()
+		if err != nil {
+		}
+
+		fmt.Fprintf(w, "<!doctype html><form method='POST' action='/publish'>"+
+			"<input required name='message' placeholder='Message'>"+
+			"<input type='submit' value='Publish'>"+
+			"</form>")
+
+		fmt.Fprintln(w, "<ul>")
+		for _, text := range texts {
+			fmt.Fprintln(w, "<li>", html.EscapeString(string(text)), "</li>")
+		}
+		fmt.Fprintln(w, "</ul>")
+	}
 }

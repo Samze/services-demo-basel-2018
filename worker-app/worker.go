@@ -17,15 +17,16 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"html"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
-	"sync"
 
 	"cloud.google.com/go/pubsub"
+	"github.com/Samze/services-demo-basel-2018/worker-app/store"
 	cfenv "github.com/cloudfoundry-community/go-cfenv"
 	"golang.org/x/net/context"
 )
@@ -36,97 +37,178 @@ const (
 	pubsubSubEnvName  = "PUBSUB_SUBSCRIPTION"
 )
 
-var (
-	messages     []*pubsub.Message
-	messagesLock sync.RWMutex
-)
+type Storer interface {
+	AddText(s string) error
+	GetProcessedText() ([]string, error)
+}
 
-func handleListMessages(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w, "<!DOCTYPE html><title>Pubsub example</title>",
-		"<h1>Pubsub example</h1>",
-		"<p>Received messages:</p>",
-		"<ul>")
-	messagesLock.RLock()
-	defer messagesLock.RUnlock()
-	for _, m := range messages {
-		fmt.Fprintln(w, "<li>", html.EscapeString(string(m.Data)))
+func handleListMessages(s Storer) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "<!DOCTYPE html><title>Pubsub example</title>",
+			"<h1>Pubsub example</h1>",
+			"<p>Received messages:</p>",
+			"<ul>")
+
+		msgs, err := s.GetProcessedText()
+		if err != nil {
+			fmt.Fprintln(w, html.EscapeString(fmt.Sprintf("Could not load msgs %+v", err)))
+		}
+
+		for _, m := range msgs {
+			fmt.Fprintln(w, "<li>", html.EscapeString(m))
+		}
 	}
+}
+
+func processMsg(m string) string {
+	var reversed []byte
+	b := []byte(m)
+	l := len(b)
+
+	for i := 0; i < l; i++ {
+		reversed = append(reversed, b[l-1-i])
+	}
+
+	return string(reversed)
 }
 
 func main() {
 	cctx, cancel := context.WithCancel(context.Background())
-	go receiveMessages(cctx)
+
+	conn, err := parsePostgresEnv()
+	if err != nil {
+		log.Fatalf("Could not load postgres env %+v", err)
+	}
+
+	key, projectID, subID, err := parsePubSubEnv()
+	if err != nil {
+		log.Printf("Could not load pubsubenv %+v", err)
+	}
+
+	tmpFile, err := writeGCPKeyfile(key)
+	if err != nil {
+		log.Printf("Could not write gcp key %+v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", tmpFile.Name())
+
+	store, err := store.NewStore(conn)
+	if err != nil {
+		log.Fatalf("Could not connect to store %+v", err)
+	}
+
+	sub, err := getSubscriber(projectID, subID)
+	if err != nil {
+		log.Fatalf("Could not get subscription %+v", err)
+	}
+
+	go receiveMessages(cctx, sub, store)
 	defer cancel()
 
-	http.HandleFunc("/", handleListMessages)
+	http.HandleFunc("/", handleListMessages(store))
 	log.Println("Listening on port: ", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", port), nil))
 }
 
-func receiveMessages(ctx context.Context) {
-	appEnv, err := cfenv.Current()
-	if err != nil {
-		log.Fatalf("Couldn't find appenv %+v", err)
-	}
-
-	service, err := appEnv.Services.WithName("pubsub")
-	if err != nil {
-		log.Fatalf("Couldn't find service %+v", err)
-	}
-
-	projectID, ok := service.CredentialString("projectId")
-	if !ok {
-		log.Fatalf("Couldn't find project id %+v", ok)
-	}
-
-	subID, ok := service.CredentialString("subscriptionId")
-	if !ok {
-		log.Fatalf("Couldn't find sub id %+v", ok)
-	}
-
-	key, ok := service.CredentialString("privateKeyData")
-	if !ok {
-		log.Fatalf("Couldn't find key i%+v", ok)
-	}
-
-	content := []byte(key)
-	tmpfile, err := ioutil.TempFile("", "key")
-	if err != nil {
-		log.Fatal(err)
-	}
-	if _, err := tmpfile.Write(content); err != nil {
-		log.Fatal(err)
-	}
-	if err := tmpfile.Close(); err != nil {
-		log.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", tmpfile.Name())
-
+func getSubscriber(projectID, subID string) (*pubsub.Subscription, error) {
+	ctx := context.Background()
 	client, err := pubsub.NewClient(ctx, projectID)
 	if err != nil {
-		log.Fatalf("Failed to create client: %v", err)
+		return nil, fmt.Errorf("Failed to create client: %v", err)
 	}
 
 	sub := client.Subscription(subID)
-
-	ok, err = sub.Exists(ctx)
+	ok, err := sub.Exists(ctx)
 	if err != nil {
-		log.Fatalf("Error finding subscription %s: %v", subID, err)
+		return nil, fmt.Errorf("Error finding subscription %s: %v", subID, err)
 	}
 	if !ok {
-		log.Fatalf("Couldn't find subscription %v", subID)
+		return nil, fmt.Errorf("Couldn't find subscription %v", subID)
 	}
 
-	err = sub.Receive(ctx, func(ctx context.Context, m *pubsub.Message) {
+	return sub, nil
+}
+
+func receiveMessages(ctx context.Context, sub *pubsub.Subscription, s Storer) {
+	err := sub.Receive(ctx, func(ctx context.Context, m *pubsub.Message) {
 		log.Printf("Got message ID=%s, payload=[%s]", m.ID, m.Data)
-		messagesLock.Lock()
-		messages = append(messages, m)
-		messagesLock.Unlock()
+		parsed := processMsg(string(m.Data))
+		err := s.AddText(parsed)
+		if err != nil {
+			log.Printf("Could not store text %+v", err)
+		}
 		m.Ack()
 	})
 
 	if err != nil {
 		log.Fatalf("Failed to receive: %v", err)
 	}
+}
+
+func writeGCPKeyfile(key string) (*os.File, error) {
+	content := []byte(key)
+	tmpFile, err := ioutil.TempFile("", "key")
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tmpFile.Write(content); err != nil {
+		return nil, err
+	}
+	if err := tmpFile.Close(); err != nil {
+		return nil, err
+	}
+	return tmpFile, nil
+}
+
+func parsePubSubEnv() (key, projectID, subID string, err error) {
+	appEnv, err := cfenv.Current()
+	if err != nil {
+		return key, projectID, subID, err
+	}
+
+	service, err := appEnv.Services.WithName("pubsub")
+	if err != nil {
+		return key, projectID, subID, err
+	}
+
+	projectID, ok := service.CredentialString("projectId")
+	if !ok {
+		return key, projectID, subID, errors.New("Could not find projectId")
+	}
+
+	subID, ok = service.CredentialString("subscriptionId")
+	if !ok {
+		return key, projectID, subID, errors.New("Could not find subscriptionId")
+	}
+
+	key, ok = service.CredentialString("privateKeyData")
+	if !ok {
+		return key, projectID, subID, errors.New("Could not find privateKeyData")
+	}
+
+	return key, projectID, subID, err
+}
+
+func parsePostgresEnv() (conn string, err error) {
+	appEnv, err := cfenv.Current()
+	if err != nil {
+		return conn, err
+	}
+
+	services, err := appEnv.Services.WithTag("PostgreSQL")
+	if err != nil {
+		return conn, err
+	}
+
+	if len(services) > 1 {
+		return conn, errors.New("More than one postgres service found")
+	}
+	service := services[0]
+
+	conn, ok := service.CredentialString("uri")
+
+	if !ok {
+		return conn, fmt.Errorf("could not load uri")
+	}
+	return conn, err
 }
