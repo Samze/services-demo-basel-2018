@@ -1,10 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"html"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -17,7 +18,6 @@ import (
 )
 
 type Storer interface {
-	GetProcessedText() ([]string, error)
 	GetProcessedImages() ([][]byte, error)
 }
 
@@ -56,14 +56,8 @@ func main() {
 		log.Fatalf("Could not connect to store %+v", err)
 	}
 
-	s, err := store.GetProcessedText()
-	if err != nil {
-		log.Fatalf("Could not get text %+v", err)
-	}
-	fmt.Println(s)
-
 	http.HandleFunc("/", getHandler(store))
-	http.HandleFunc("/publish", postHandler(topic))
+	http.HandleFunc("/images", postImageHandler(topic))
 
 	fmt.Println("Listening on port:", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", port), nil))
@@ -162,38 +156,42 @@ func setupTopic(projectID, topicID string) (*pubsub.Topic, error) {
 	return topic, nil
 }
 
-func postHandler(t *pubsub.Topic) func(w http.ResponseWriter, r *http.Request) {
+func postImageHandler(t *pubsub.Topic) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		message := r.FormValue("message")
-		result := t.Publish(ctx, &pubsub.Message{Data: []byte(message)})
+
+		file, _, err := r.FormFile("image")
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to read img: %v", err), http.StatusInternalServerError)
+			return
+		}
+		defer file.Close()
+
+		imgBuf := bytes.NewBuffer(nil)
+		if _, err := io.Copy(imgBuf, file); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to copy img: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		result := t.Publish(ctx, &pubsub.Message{Data: imgBuf.Bytes()})
 		serverID, err := result.Get(ctx)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to publish: %v", err), http.StatusInternalServerError)
 			return
 		}
-		fmt.Printf("Published message ID=%s", serverID)
+		fmt.Printf("Published img ID=%s", serverID)
 		http.Redirect(w, r, "/", http.StatusFound)
 	}
 }
 
 func getHandler(t Storer) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "<!doctype html><form method='POST' action='/publish'>"+
-			"<input required name='message' placeholder='Message'>"+
-			"<input type='submit' value='Publish'>"+
+		fmt.Fprintf(w, "<!doctype html>")
+
+		fmt.Fprintf(w, "<form method='POST' enctype='multipart/form-data' action='/images'>"+
+			"<input type='file' name='image' accept='image/png'>"+
+			"<input type='submit' value='upload'>"+
 			"</form>")
-
-		texts, err := t.GetProcessedText()
-		if err != nil {
-			fmt.Fprintf(w, "err getting text %+v", err)
-		}
-
-		fmt.Fprintln(w, "<ul>")
-		for _, text := range texts {
-			fmt.Fprintln(w, "<li>", html.EscapeString(string(text)), "</li>")
-		}
-		fmt.Fprintln(w, "</ul>")
 
 		images, err := t.GetProcessedImages()
 		if err != nil {

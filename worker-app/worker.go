@@ -24,6 +24,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 
 	"cloud.google.com/go/pubsub"
 	"github.com/Samze/services-demo-basel-2018/worker-app/store"
@@ -38,9 +39,11 @@ const (
 )
 
 type Storer interface {
-	AddText(s string) error
-	GetProcessedText() ([]string, error)
+	AddImage(img []byte) error
 }
+
+var processedIDs []string
+var processedIDsLock sync.Mutex
 
 func handleListMessages(s Storer) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -49,27 +52,18 @@ func handleListMessages(s Storer) func(w http.ResponseWriter, r *http.Request) {
 			"<p>Received messages:</p>",
 			"<ul>")
 
-		msgs, err := s.GetProcessedText()
-		if err != nil {
-			fmt.Fprintln(w, html.EscapeString(fmt.Sprintf("Could not load msgs %+v", err)))
+		processedIDsLock.Lock()
+		for _, id := range processedIDs {
+			fmt.Fprintln(w, "<li>", html.EscapeString(id))
 		}
+		processedIDsLock.Unlock()
+		fmt.Fprint(w, "<ul>")
 
-		for _, m := range msgs {
-			fmt.Fprintln(w, "<li>", html.EscapeString(m))
-		}
 	}
 }
 
-func processMsg(m string) string {
-	var reversed []byte
-	b := []byte(m)
-	l := len(b)
-
-	for i := 0; i < l; i++ {
-		reversed = append(reversed, b[l-1-i])
-	}
-
-	return string(reversed)
+func processImg(img []byte) []byte {
+	return img
 }
 
 func main() {
@@ -131,12 +125,19 @@ func getSubscriber(projectID, subID string) (*pubsub.Subscription, error) {
 
 func receiveMessages(ctx context.Context, sub *pubsub.Subscription, s Storer) {
 	err := sub.Receive(ctx, func(ctx context.Context, m *pubsub.Message) {
-		log.Printf("Got message ID=%s, payload=[%s]", m.ID, m.Data)
-		parsed := processMsg(string(m.Data))
-		err := s.AddText(parsed)
+		fmt.Printf("Got message ID=%s, payload=[%s]", m.ID, m.Data)
+
+		img := processImg(m.Data)
+
+		err := s.AddImage(img)
 		if err != nil {
 			log.Printf("Could not store text %+v", err)
 		}
+
+		processedIDsLock.Lock()
+		processedIDs = append(processedIDs, m.ID)
+		processedIDsLock.Unlock()
+
 		m.Ack()
 	})
 
