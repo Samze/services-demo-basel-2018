@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -8,18 +9,23 @@ import (
 	"os"
 
 	"cloud.google.com/go/pubsub"
+	"github.com/Samze/services-demo-basel-2018/web-app/store"
 	cfenv "github.com/cloudfoundry-community/go-cfenv"
 	"golang.org/x/net/context"
 )
+
+type Storer interface {
+	GetProcessedText() string
+}
 
 const (
 	port = "8080"
 )
 
 func main() {
-	key, projectID, topicID, err := parseVCAPServices()
+	key, projectID, topicID, err := parsePubSubEnv()
 	if err != nil {
-		log.Fatalf("could not parse env %+v", err)
+		log.Fatalf("could not parse pubsub env %+v", err)
 	}
 
 	tmpFile, err := writeGCPKeyfile(key)
@@ -37,37 +43,79 @@ func main() {
 
 	defer topic.Stop()
 
+	conn, err := parsePostgresEnv()
+	if err != nil {
+		log.Fatalf("could not parse postgres env %+v", err)
+	}
+
+	store, err := store.NewStore(conn)
+	if err != nil {
+		log.Fatalf("Could not connect to store %+v", err)
+	}
+
+	s := store.GetProcessedText()
+	fmt.Println(s)
+
 	http.HandleFunc("/", getHandler)
 	http.HandleFunc("/publish", postHandler(topic))
 
-	log.Println("Listening on port:", port)
+	fmt.Println("Listening on port:", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", port), nil))
 }
 
-func parseVCAPServices() (key, projectID, topicID string, err error) {
+func parsePostgresEnv() (conn string, err error) {
+	appEnv, err := cfenv.Current()
+	if err != nil {
+		return conn, err
+	}
+
+	services, err := appEnv.Services.WithTag("PostgreSQL")
+	if err != nil {
+		return conn, err
+	}
+
+	if len(services) > 1 {
+		return conn, errors.New("More than one postgres service found")
+	}
+	service := services[0]
+
+	conn, ok := service.CredentialString("uri")
+
+	if !ok {
+		return conn, fmt.Errorf("could not load uri")
+	}
+	return conn, err
+
+}
+func parsePubSubEnv() (key, projectID, topicID string, err error) {
 	appEnv, err := cfenv.Current()
 	if err != nil {
 		return key, projectID, topicID, err
 	}
 
-	service, err := appEnv.Services.WithName("pubsub")
+	services, err := appEnv.Services.WithLabel("cloud-pubsub")
 	if err != nil {
 		return key, projectID, topicID, err
 	}
 
+	if len(services) > 1 {
+		return key, projectID, topicID, errors.New("More than one pubsub service found")
+	}
+	service := services[0]
+
 	key, ok := service.CredentialString("privateKeyData")
 	if !ok {
-		return key, projectID, topicID, err
+		return key, projectID, topicID, fmt.Errorf("could not load privatekey")
 	}
 
 	projectID, ok = service.CredentialString("projectId")
 	if !ok {
-		return key, projectID, topicID, err
+		return key, projectID, topicID, fmt.Errorf("could not load projectId")
 	}
 
 	topicID, ok = service.CredentialString("topicId")
 	if !ok {
-		return key, projectID, topicID, err
+		return key, projectID, topicID, fmt.Errorf("could not load topicId")
 	}
 
 	return key, projectID, topicID, nil
@@ -94,7 +142,7 @@ func setupTopic(projectID, topicID string) (*pubsub.Topic, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create client: %v", err)
 	}
-	log.Println("Created client")
+	fmt.Println("Created client")
 
 	topic := client.Topic(topicID)
 
@@ -118,7 +166,7 @@ func postHandler(t *pubsub.Topic) func(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("Failed to publish: %v", err), http.StatusInternalServerError)
 			return
 		}
-		log.Printf("Published message ID=%s", serverID)
+		fmt.Printf("Published message ID=%s", serverID)
 		http.Redirect(w, r, "/", http.StatusFound)
 	}
 }
