@@ -27,6 +27,7 @@ import (
 	"sync"
 
 	"cloud.google.com/go/pubsub"
+	"github.com/Samze/services-demo-basel-2018/worker-app/classifier"
 	"github.com/Samze/services-demo-basel-2018/worker-app/store"
 	cfenv "github.com/cloudfoundry-community/go-cfenv"
 	"golang.org/x/net/context"
@@ -39,7 +40,11 @@ const (
 )
 
 type Storer interface {
-	AddImage(img []byte) error
+	AddImage(img, classifier []byte) error
+}
+
+type Vision interface {
+	ClassifyImage(img []byte) ([]byte, error)
 }
 
 var processedIDs []string
@@ -62,8 +67,14 @@ func handleListMessages(s Storer) func(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func processImg(img []byte) []byte {
-	return img
+func processImg(img []byte, v Vision) []byte {
+	clasiffication, err := v.ClassifyImage(img)
+
+	if err != nil {
+		log.Printf("Could not classify image %s", err)
+	}
+
+	return clasiffication
 }
 
 func main() {
@@ -96,7 +107,17 @@ func main() {
 		log.Fatalf("Could not get subscription %+v", err)
 	}
 
-	go receiveMessages(cctx, sub, store)
+	apiKey, url, err := parseVisionEnv()
+	if err != nil {
+		log.Fatalf("Could not parse vision service env")
+	}
+
+	classifier, err := classifier.NewVision(url, apiKey)
+	if err != nil {
+		log.Fatalf("Could not parse vision service credentials")
+	}
+
+	go receiveMessages(cctx, sub, store, classifier)
 	defer cancel()
 
 	http.HandleFunc("/", handleListMessages(store))
@@ -123,13 +144,13 @@ func getSubscriber(projectID, subID string) (*pubsub.Subscription, error) {
 	return sub, nil
 }
 
-func receiveMessages(ctx context.Context, sub *pubsub.Subscription, s Storer) {
+func receiveMessages(ctx context.Context, sub *pubsub.Subscription, s Storer, v Vision) {
 	err := sub.Receive(ctx, func(ctx context.Context, m *pubsub.Message) {
-		fmt.Printf("Got message ID=%s, payload=[%s]", m.ID, m.Data)
+		fmt.Printf("Got message ID=%s", m.ID)
 
-		img := processImg(m.Data)
+		imageClassification := processImg(m.Data, v)
 
-		err := s.AddImage(img)
+		err := s.AddImage(m.Data, imageClassification)
 		if err != nil {
 			log.Printf("Could not store text %+v", err)
 		}
@@ -212,4 +233,28 @@ func parsePostgresEnv() (conn string, err error) {
 		return conn, fmt.Errorf("could not load uri")
 	}
 	return conn, err
+}
+
+func parseVisionEnv() (apiKey, url string, err error) {
+	appEnv, err := cfenv.Current()
+	if err != nil {
+		return apiKey, url, err
+	}
+
+	service, err := appEnv.Services.WithName("vision")
+	if err != nil {
+		return apiKey, url, err
+	}
+
+	apiKey, ok := service.CredentialString("apikey")
+	if !ok {
+		return apiKey, url, errors.New("Could not find apikey")
+	}
+
+	url, ok = service.CredentialString("url")
+	if !ok {
+		return apiKey, url, errors.New("Could not find url")
+	}
+
+	return apiKey, url, nil
 }

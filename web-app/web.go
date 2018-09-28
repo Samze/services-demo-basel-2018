@@ -19,6 +19,7 @@ import (
 
 type Storer interface {
 	GetProcessedImages() ([][]byte, error)
+	GetClassifications() ([][]byte, error)
 }
 
 const (
@@ -201,6 +202,15 @@ func getHandler(t Storer) func(w http.ResponseWriter, r *http.Request) {
 		for _, img := range images {
 			encodedImg := base64.StdEncoding.EncodeToString(img)
 			fmt.Fprintln(w, `<img src="data:image/png;base64,`, encodedImg, `">`)
+		}
+
+		classifications, err := t.GetClassifications()
+		if err != nil {
+			fmt.Fprintf(w, "err getting classifications %+v", err)
+		}
+
+		for _, class := range classifications {
+			fmt.Fprintln(w, string(class))
 		}
 	}
 }

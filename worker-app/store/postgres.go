@@ -28,13 +28,13 @@ func NewStore(conn string) (*Store, error) {
 
 func (s *Store) createTables() error {
 	_, err := s.db.Query(`
-	CREATE TABLE IF NOT EXISTS images (imgname text, img bytea)
+	CREATE TABLE IF NOT EXISTS images (imgname text, img bytea, classification json)
 	`)
 	return err
 }
 
-func (s *Store) AddImage(img []byte) error {
-	sqlStatement := `INSERT INTO images VALUES ($1, $2)`
-	_, err := s.db.Exec(sqlStatement, "imgname", img)
+func (s *Store) AddImage(img, classification []byte) error {
+	sqlStatement := `INSERT INTO images VALUES ($1, $2, $3)`
+	_, err := s.db.Exec(sqlStatement, "imgname", img, string(classification))
 	return err
 }

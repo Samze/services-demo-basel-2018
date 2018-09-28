@@ -37,7 +37,7 @@ func (s *Store) createTables() error {
 	`)
 
 	_, err := s.db.Query(`
-	CREATE TABLE IF NOT EXISTS images (imgname text, img bytea)
+	CREATE TABLE IF NOT EXISTS images (imgname text, img bytea, classification json)
 	`)
 	if err != nil {
 		return err
@@ -62,6 +62,27 @@ func (s *Store) GetProcessedImages() ([][]byte, error) {
 		}
 
 		result = append(result, img)
+	}
+
+	return result, nil
+}
+
+func (s *Store) GetClassifications() ([][]byte, error) {
+	rows, err := s.db.Query("SELECT classification FROM images")
+	if err != nil {
+		return nil, err
+	}
+
+	var result [][]byte
+
+	for rows.Next() {
+		var class []byte
+		err := rows.Scan(&class)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, class)
 	}
 
 	return result, nil

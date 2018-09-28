@@ -24,6 +24,7 @@ pushd worker-app
   wait_on_bind_completion worker-app
 
   cf bind-service worker-app postgresql
+  cf bind-service worker-app vision
 
   cf restart worker-app
 popd

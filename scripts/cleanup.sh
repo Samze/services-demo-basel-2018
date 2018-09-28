@@ -14,5 +14,7 @@ unbind worker-app pubsub
 unbind web-app postgresql
 unbind worker-app postgresql
 
+unbind worker-app vision
+
 cf d web-app -f
 cf d worker-app -f
