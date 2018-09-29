@@ -221,16 +221,20 @@ type Class struct {
 }
 
 func convertImage(img store.Image) Image {
-	var classes Classification
-	err := json.Unmarshal([]byte(img.Classification), &classes)
+	var classification Classification
+	err := json.Unmarshal([]byte(img.Classification), &classification)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("%+v", classes)
+
+	var classes []Class
+	for i := 0; i < 3; i++ {
+		classes = append(classes, classification.Images[0].Classifiers[0].Classes[i])
+	}
 
 	return Image{
 		Img:     base64.StdEncoding.EncodeToString(img.Img),
-		Classes: classes.Images[0].Classifiers[0].Classes,
+		Classes: classes,
 	}
 }
 
