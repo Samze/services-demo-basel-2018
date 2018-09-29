@@ -46,6 +46,7 @@ func main() {
 	}
 
 	http.HandleFunc("/images", postImageHandler(queue))
+	http.Handle("/css/", http.StripPrefix("/css/", http.FileServer(http.Dir("./css"))))
 	http.HandleFunc("/", getHandler(store))
 
 	fmt.Println("Listening on port:", port)
@@ -78,8 +79,6 @@ func postImageHandler(q Queuer) func(w http.ResponseWriter, r *http.Request) {
 
 func getHandler(s Storer) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("here")
-
 		t, err := template.ParseFiles("tmpl/home.html")
 		if err != nil {
 			fmt.Fprintf(w, "err getting template %+v", err)
