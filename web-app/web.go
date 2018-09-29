@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"io"
 	"io/ioutil"
 	"log"
@@ -18,7 +20,7 @@ import (
 )
 
 type Storer interface {
-	GetProcessedImages() ([][]byte, error)
+	GetProcessedImages() ([]store.Image, error)
 	GetClassifications() ([][]byte, error)
 }
 
@@ -59,8 +61,9 @@ func main() {
 		log.Fatalf("Could not connect to store %+v", err)
 	}
 
-	http.HandleFunc("/", getHandler(store))
+	// http.HandleFunc("/", getHandler(store))
 	http.HandleFunc("/images", postImageHandler(topic))
+	http.HandleFunc("/", getHandlerTest(store))
 
 	fmt.Println("Listening on port:", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", port), nil))
@@ -200,32 +203,92 @@ func postImageHandler(t *pubsub.Topic) func(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-func getHandler(t Storer) func(w http.ResponseWriter, r *http.Request) {
+type Image struct {
+	Img     string
+	Classes []Class
+}
+
+type Classification struct {
+	Images []struct {
+		Classifiers []struct {
+			Classes []Class
+		}
+	}
+}
+
+type Class struct {
+	Class string
+	Score float64
+}
+
+func convertImage(img store.Image) Image {
+	var classes Classification
+	err := json.Unmarshal([]byte(img.Classification), &classes)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("%+v", classes)
+
+	return Image{
+		Img:     base64.StdEncoding.EncodeToString(img.Img),
+		Classes: classes.Images[0].Classifiers[0].Classes,
+	}
+}
+
+func getHandlerTest(s Storer) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "<!doctype html>")
+		fmt.Println("here")
 
-		fmt.Fprintf(w, "<form method='POST' enctype='multipart/form-data' action='/images'>"+
-			"<input type='file' name='image' accept='image/png'>"+
-			"<input type='submit' value='upload'>"+
-			"</form>")
+		t, err := template.ParseFiles("tmpl/home.html") // Parse template file
+		if err != nil {
+			fmt.Fprintf(w, "err getting template %+v", err)
+		}
 
-		images, err := t.GetProcessedImages()
+		images, err := s.GetProcessedImages()
 		if err != nil {
 			fmt.Fprintf(w, "err getting images %+v", err)
 		}
 
+		var convertedImages []Image
 		for _, img := range images {
-			encodedImg := base64.StdEncoding.EncodeToString(img)
-			fmt.Fprintln(w, `<img src="data:image/png;base64,`, encodedImg, `">`)
+			convertedImages = append(convertedImages, convertImage(img))
 		}
 
-		classifications, err := t.GetClassifications()
-		if err != nil {
-			fmt.Fprintf(w, "err getting classifications %+v", err)
+		data := map[string][]Image{
+			"Images": convertedImages,
 		}
 
-		for _, class := range classifications {
-			fmt.Fprintln(w, string(class))
-		}
+		t.Execute(w, data)
 	}
 }
+
+//
+// func getHandler(t Storer) func(w http.ResponseWriter, r *http.Request) {
+// 	return func(w http.ResponseWriter, r *http.Request) {
+// 		fmt.Fprintf(w, "<!doctype html>")
+//
+// 		fmt.Fprintf(w, "<form method='POST' enctype='multipart/form-data' action='/images'>"+
+// 			"<input type='file' name='image' accept='image/png'>"+
+// 			"<input type='submit' value='upload'>"+
+// 			"</form>")
+//
+// 		images, err := t.GetProcessedImages()
+// 		if err != nil {
+// 			fmt.Fprintf(w, "err getting images %+v", err)
+// 		}
+//
+// 		for _, img := range images {
+// 			encodedImg := base64.StdEncoding.EncodeToString(img)
+// 			fmt.Fprintln(w, `<img src="data:image/png;base64,`, encodedImg, `">`)
+// 		}
+//
+// 		classifications, err := t.GetClassifications()
+// 		if err != nil {
+// 			fmt.Fprintf(w, "err getting classifications %+v", err)
+// 		}
+//
+// 		for _, class := range classifications {
+// 			fmt.Fprintln(w, string(class))
+// 		}
+// 	}
+// }

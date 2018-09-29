@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"io/ioutil"
 
 	_ "github.com/lib/pq"
 )
@@ -43,20 +44,76 @@ func (s *Store) createTables() error {
 		return err
 	}
 
+	sqlStatement := `INSERT INTO images VALUES ($1, $2, $3)`
+
+	img, err := ioutil.ReadFile("osbapi.png")
+	if err != nil {
+		return err
+	}
+
+	_, err = s.db.Exec(sqlStatement, "imgname", img, `{
+	"images": [{
+		"classifiers": [{
+			"classifier_id": "default",
+			"name": "default",
+			"classes": [{
+				"class": "banana",
+				"score": 0.562,
+				"type_hierarchy": "/fruit/banana"
+			}, {
+				"class": "fruit",
+				"score": 0.788
+			}, {
+				"class": "diet (food)",
+				"score": 0.528,
+				"type_hierarchy": "/food/diet (food)"
+			}, {
+				"class": "food",
+				"score": 0.528
+			}, {
+				"class": "honeydew",
+				"score": 0.5,
+				"type_hierarchy": "/fruit/melon/honeydew"
+			}, {
+				"class": "melon",
+				"score": 0.501
+			}, {
+				"class": "olive color",
+				"score": 0.973
+			}, {
+				"class": "lemon yellow color",
+				"score": 0.789
+			}]
+		}],
+		"image": "fruitbowl.jpg"
+	}],
+	"images_processed": 1,
+	"custom_classes": 0
+}`)
+
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
-func (s *Store) GetProcessedImages() ([][]byte, error) {
-	rows, err := s.db.Query("SELECT img FROM images")
+type Image struct {
+	Img            []byte
+	Classification string
+}
+
+func (s *Store) GetProcessedImages() ([]Image, error) {
+	rows, err := s.db.Query("SELECT img, classification FROM images")
 	if err != nil {
 		return nil, err
 	}
 
-	var result [][]byte
+	var result []Image
 
 	for rows.Next() {
-		var img []byte
-		err := rows.Scan(&img)
+		var img Image
+		err := rows.Scan(&img.Img, &img.Classification)
 		if err != nil {
 			return nil, err
 		}
