@@ -61,9 +61,8 @@ func main() {
 		log.Fatalf("Could not connect to store %+v", err)
 	}
 
-	// http.HandleFunc("/", getHandler(store))
 	http.HandleFunc("/images", postImageHandler(topic))
-	http.HandleFunc("/", getHandlerTest(store))
+	http.HandleFunc("/", getHandler(store))
 
 	fmt.Println("Listening on port:", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", port), nil))
@@ -235,7 +234,7 @@ func convertImage(img store.Image) Image {
 	}
 }
 
-func getHandlerTest(s Storer) func(w http.ResponseWriter, r *http.Request) {
+func getHandler(s Storer) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("here")
 
@@ -261,34 +260,3 @@ func getHandlerTest(s Storer) func(w http.ResponseWriter, r *http.Request) {
 		t.Execute(w, data)
 	}
 }
-
-//
-// func getHandler(t Storer) func(w http.ResponseWriter, r *http.Request) {
-// 	return func(w http.ResponseWriter, r *http.Request) {
-// 		fmt.Fprintf(w, "<!doctype html>")
-//
-// 		fmt.Fprintf(w, "<form method='POST' enctype='multipart/form-data' action='/images'>"+
-// 			"<input type='file' name='image' accept='image/png'>"+
-// 			"<input type='submit' value='upload'>"+
-// 			"</form>")
-//
-// 		images, err := t.GetProcessedImages()
-// 		if err != nil {
-// 			fmt.Fprintf(w, "err getting images %+v", err)
-// 		}
-//
-// 		for _, img := range images {
-// 			encodedImg := base64.StdEncoding.EncodeToString(img)
-// 			fmt.Fprintln(w, `<img src="data:image/png;base64,`, encodedImg, `">`)
-// 		}
-//
-// 		classifications, err := t.GetClassifications()
-// 		if err != nil {
-// 			fmt.Fprintf(w, "err getting classifications %+v", err)
-// 		}
-//
-// 		for _, class := range classifications {
-// 			fmt.Fprintln(w, string(class))
-// 		}
-// 	}
-// }
