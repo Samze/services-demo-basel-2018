@@ -2,8 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -20,8 +18,7 @@ import (
 )
 
 type Storer interface {
-	GetProcessedImages() ([]store.Image, error)
-	GetClassifications() ([][]byte, error)
+	GetImages() ([]store.Image, error)
 }
 
 const (
@@ -202,63 +199,22 @@ func postImageHandler(t *pubsub.Topic) func(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-type Image struct {
-	Img     string
-	Classes []Class
-}
-
-type Classification struct {
-	Images []struct {
-		Classifiers []struct {
-			Classes []Class
-		}
-	}
-}
-
-type Class struct {
-	Class string
-	Score float64
-}
-
-func convertImage(img store.Image) Image {
-	var classification Classification
-	err := json.Unmarshal([]byte(img.Classification), &classification)
-	if err != nil {
-		panic(err)
-	}
-
-	var classes []Class
-	for i := 0; i < 3; i++ {
-		classes = append(classes, classification.Images[0].Classifiers[0].Classes[i])
-	}
-
-	return Image{
-		Img:     base64.StdEncoding.EncodeToString(img.Img),
-		Classes: classes,
-	}
-}
-
 func getHandler(s Storer) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("here")
 
-		t, err := template.ParseFiles("tmpl/home.html") // Parse template file
+		t, err := template.ParseFiles("tmpl/home.html")
 		if err != nil {
 			fmt.Fprintf(w, "err getting template %+v", err)
 		}
 
-		images, err := s.GetProcessedImages()
+		images, err := s.GetImages()
 		if err != nil {
 			fmt.Fprintf(w, "err getting images %+v", err)
 		}
 
-		var convertedImages []Image
-		for _, img := range images {
-			convertedImages = append(convertedImages, convertImage(img))
-		}
-
-		data := map[string][]Image{
-			"Images": convertedImages,
+		data := map[string][]store.Image{
+			"Images": images,
 		}
 
 		t.Execute(w, data)

@@ -2,6 +2,8 @@ package store
 
 import (
 	"database/sql"
+	"encoding/base64"
+	"encoding/json"
 	"io/ioutil"
 
 	_ "github.com/lib/pq"
@@ -99,20 +101,52 @@ func (s *Store) createTables() error {
 }
 
 type Image struct {
+	Img     string
+	Classes []Class
+}
+
+type Classification struct {
+	Images []struct {
+		Classifiers []struct {
+			Classes []Class
+		}
+	}
+}
+
+type Class struct {
+	Class string
+	Score float64
+}
+
+type rawImage struct {
 	Img            []byte
 	Classification string
 }
 
-func (s *Store) GetProcessedImages() ([]Image, error) {
+func (s *Store) GetImages() ([]Image, error) {
+	processedImages, err := s.getProcessedImages()
+
+	if err != nil {
+		return nil, nil
+	}
+
+	var images []Image
+	for _, img := range processedImages {
+		images = append(images, convertImage(img))
+	}
+	return images, nil
+}
+
+func (s *Store) getProcessedImages() ([]rawImage, error) {
 	rows, err := s.db.Query("SELECT img, classification FROM images")
 	if err != nil {
 		return nil, err
 	}
 
-	var result []Image
+	var result []rawImage
 
 	for rows.Next() {
-		var img Image
+		var img rawImage
 		err := rows.Scan(&img.Img, &img.Classification)
 		if err != nil {
 			return nil, err
@@ -124,23 +158,20 @@ func (s *Store) GetProcessedImages() ([]Image, error) {
 	return result, nil
 }
 
-func (s *Store) GetClassifications() ([][]byte, error) {
-	rows, err := s.db.Query("SELECT classification FROM images")
+func convertImage(img rawImage) Image {
+	var classification Classification
+	err := json.Unmarshal([]byte(img.Classification), &classification)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
-	var result [][]byte
-
-	for rows.Next() {
-		var class []byte
-		err := rows.Scan(&class)
-		if err != nil {
-			return nil, err
-		}
-
-		result = append(result, class)
+	var classes []Class
+	for i := 0; i < 3; i++ {
+		classes = append(classes, classification.Images[0].Classifiers[0].Classes[i])
 	}
 
-	return result, nil
+	return Image{
+		Img:     base64.StdEncoding.EncodeToString(img.Img),
+		Classes: classes,
+	}
 }
