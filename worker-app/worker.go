@@ -34,9 +34,10 @@ import (
 )
 
 const (
-	port              = "8080"
-	gcpProjectEnvName = "GOOGLE_CLOUD_PROJECT"
-	pubsubSubEnvName  = "PUBSUB_SUBSCRIPTION"
+	port                  = "8080"
+	gcpProjectEnvName     = "GOOGLE_CLOUD_PROJECT"
+	pubsubSubEnvName      = "PUBSUB_SUBSCRIPTION"
+	appCredentialsEnvName = "GOOGLE_APPLICATION_CREDENTIALS"
 )
 
 type Storer interface {
@@ -84,22 +85,22 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not load postgres env %+v", err)
 	}
+	store, err := store.NewStore(conn)
+	if err != nil {
+		log.Fatalf("Could not connect to store %+v", err)
+	}
 
 	key, projectID, subID, err := parsePubSubEnv()
 	if err != nil {
 		log.Printf("Could not load pubsubenv %+v", err)
 	}
-
-	tmpFile, err := writeGCPKeyfile(key)
-	if err != nil {
-		log.Printf("Could not write gcp key %+v", err)
-	}
-	defer os.Remove(tmpFile.Name())
-	os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", tmpFile.Name())
-
-	store, err := store.NewStore(conn)
-	if err != nil {
-		log.Fatalf("Could not connect to store %+v", err)
+	if _, ok := os.LookupEnv(appCredentialsEnvName); !ok {
+		tmpFile, err := writeGCPKeyfile(key)
+		if err != nil {
+			log.Printf("Could not write gcp key %+v", err)
+		}
+		defer os.Remove(tmpFile.Name())
+		os.Setenv(appCredentialsEnvName, tmpFile.Name())
 	}
 
 	sub, err := getSubscriber(projectID, subID)
@@ -183,6 +184,14 @@ func writeGCPKeyfile(key string) (*os.File, error) {
 }
 
 func parsePubSubEnv() (key, projectID, subID string, err error) {
+	if projectID, ok := os.LookupEnv(gcpProjectEnvName); ok {
+		// k8s
+		if subID, ok := os.LookupEnv(pubsubSubEnvName); ok {
+			return key, projectID, subID, nil
+		}
+	}
+
+	// CF
 	appEnv, err := cfenv.Current()
 	if err != nil {
 		return key, projectID, subID, err
@@ -217,6 +226,10 @@ func parsePubSubEnv() (key, projectID, subID string, err error) {
 }
 
 func parsePostgresEnv() (conn string, err error) {
+	if connectionString, ok := os.LookupEnv("POSTGRESQL_URI"); ok {
+		// in k8s
+		return connectionString, nil
+	}
 	appEnv, err := cfenv.Current()
 	if err != nil {
 		return conn, err
@@ -241,6 +254,13 @@ func parsePostgresEnv() (conn string, err error) {
 }
 
 func parseVisionEnv() (apiKey, url string, err error) {
+	if apiKey, ok := os.LookupEnv("VISION_APIKEY"); ok {
+		// assume we're in k8s
+		if url, ok := os.LookupEnv("VISION_URL"); ok {
+			return apiKey, url, nil
+		}
+	}
+	// CF
 	appEnv, err := cfenv.Current()
 	if err != nil {
 		return apiKey, url, err
