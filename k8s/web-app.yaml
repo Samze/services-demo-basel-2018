@@ -1,3 +1,4 @@
+---
 apiVersion: apps/v1beta2
 kind: Deployment
 metadata:
@@ -17,7 +18,7 @@ spec:
       volumes:
         - name: service-account
           secret:
-           secretName: publisher-binding
+           secretName: pub-binding
       containers:
         - name: "web-app"
           image: "servicesapi/web-app"
@@ -35,14 +36,14 @@ spec:
                 secretKeyRef:
                   # Use the projectId value from the 'publisher' secret created
                   # as a result of binding to the Pub/Sub service instance.
-                  name: publisher-binding
+                  name: pub-binding
                   key: projectId
             - name: PUBSUB_TOPIC
               valueFrom:
                 secretKeyRef:
                   # Use the topicId value from the 'publisher' secret created
                   # as a result of binding to the Pub/Sub service instance.
-                  name: publisher-binding
+                  name: pub-binding
                   key: topicId
             - name: POSTGRESQL_URI
               valueFrom:

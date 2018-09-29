@@ -1,3 +1,4 @@
+---
 apiVersion: apps/v1beta2
 kind: Deployment
 metadata:
@@ -17,7 +18,7 @@ spec:
       volumes:
         - name: service-account
           secret:
-           secretName: subscriber-binding
+           secretName: sub-binding
       containers:
         - name: "worker-app"
           image: "servicesapi/worker-app"
@@ -33,12 +34,12 @@ spec:
             - name: GOOGLE_CLOUD_PROJECT
               valueFrom:
                 secretKeyRef:
-                  name: subscriber-binding
+                  name: sub-binding
                   key: projectId
             - name: PUBSUB_SUBSCRIPTION
               valueFrom:
                 secretKeyRef:
-                  name: subscriber-binding
+                  name: sub-binding
                   key: subscriptionId
             - name: POSTGRESQL_URI
               valueFrom:
