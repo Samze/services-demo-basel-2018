@@ -1,0 +1,68 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: "web-app"
+  namespace: "default"
+  labels:
+    app: "web-app"
+spec:
+  selector:
+    matchLabels:
+      app: "web-app"
+  template:
+    metadata:
+      labels:
+        app: "web-app"
+    spec:
+      volumes:
+        - name: service-account
+          secret:
+           secretName: publisher-binding
+      containers:
+        - name: "web-app"
+          image: "servicesapi/web-app"
+          imagePullPolicy: "Always"
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: service-account
+              mountPath: /var/secrets/service-account
+          env:
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /var/secrets/service-account/privateKeyData
+            - name: POSTGRESQL_URI
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-binding
+                  key: uri
+            - name: GOOGLE_CLOUD_PROJECT
+              valueFrom:
+                secretKeyRef:
+                  # Use the projectId value from the 'publisher' secret created
+                  # as a result of binding to the Pub/Sub service instance.
+                  name: publisher-binding
+                  key: projectId
+            - name: PUBSUB_TOPIC
+              valueFrom:
+                secretKeyRef:
+                  # Use the topicId value from the 'publisher' secret created
+                  # as a result of binding to the Pub/Sub service instance.
+                  name: publisher-binding
+                  key: topicId
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "web-app-service"
+  namespace: "default"
+  labels:
+    app: "web-app"
+spec:
+  selector:
+    app: "web-app"
+  ports:
+  - port: 80
+    targetPort: 8080
+  type: "LoadBalancer"
+

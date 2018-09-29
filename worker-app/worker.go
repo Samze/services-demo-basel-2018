@@ -188,10 +188,15 @@ func parsePubSubEnv() (key, projectID, subID string, err error) {
 		return key, projectID, subID, err
 	}
 
-	service, err := appEnv.Services.WithName("pubsub")
+	services, err := appEnv.Services.WithLabel("cloud-pubsub")
 	if err != nil {
 		return key, projectID, subID, err
 	}
+
+	if len(services) > 1 {
+		return key, projectID, subID, errors.New("More than one pubsub service found")
+	}
+	service := services[0]
 
 	projectID, ok := service.CredentialString("projectId")
 	if !ok {
@@ -217,7 +222,7 @@ func parsePostgresEnv() (conn string, err error) {
 		return conn, err
 	}
 
-	services, err := appEnv.Services.WithTag("PostgreSQL")
+	services, err := appEnv.Services.WithLabel("azure-postgresql-9-6")
 	if err != nil {
 		return conn, err
 	}
@@ -241,10 +246,15 @@ func parseVisionEnv() (apiKey, url string, err error) {
 		return apiKey, url, err
 	}
 
-	service, err := appEnv.Services.WithName("vision")
+	services, err := appEnv.Services.WithLabel("watson-vision-combined")
 	if err != nil {
 		return apiKey, url, err
 	}
+
+	if len(services) > 1 {
+		return apiKey, url, errors.New("More than one vision service found")
+	}
+	service := services[0]
 
 	apiKey, ok := service.CredentialString("apikey")
 	if !ok {

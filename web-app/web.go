@@ -23,7 +23,8 @@ type Storer interface {
 }
 
 const (
-	port = "8080"
+	port                 = "8080"
+	googleAppCredentials = "GOOGLE_APPLICATION_CREDENTIALS"
 )
 
 func main() {
@@ -31,14 +32,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("could not parse pubsub env %+v", err)
 	}
+	if _, ok := os.LookupEnv(googleAppCredentials); !ok {
+		tmpFile, err := writeGCPKeyfile(key)
+		if err != nil {
+			log.Fatalf("could not write gcp file")
+		}
 
-	tmpFile, err := writeGCPKeyfile(key)
-	if err != nil {
-		log.Fatalf("could not write gcp file")
+		os.Setenv(googleAppCredentials, tmpFile.Name())
+		defer os.Remove(tmpFile.Name())
 	}
-
-	os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", tmpFile.Name())
-	defer os.Remove(tmpFile.Name())
 
 	topic, err := setupTopic(projectID, topicID)
 	if err != nil {
@@ -65,12 +67,18 @@ func main() {
 }
 
 func parsePostgresEnv() (conn string, err error) {
+	if connectionString, ok := os.LookupEnv("POSTGRESQL_URI"); ok {
+		// in k8s
+		return connectionString, nil
+	}
+
+	// in CF
 	appEnv, err := cfenv.Current()
 	if err != nil {
 		return conn, err
 	}
 
-	services, err := appEnv.Services.WithTag("PostgreSQL")
+	services, err := appEnv.Services.WithLabel("azure-postgresql-9-6")
 	if err != nil {
 		return conn, err
 	}
@@ -89,6 +97,13 @@ func parsePostgresEnv() (conn string, err error) {
 }
 
 func parsePubSubEnv() (key, projectID, topicID string, err error) {
+	if projectID, ok := os.LookupEnv("GOOGLE_CLOUD_PROJECT"); ok {
+		// assume we're in k8s
+		if topicID, ok := os.LookupEnv("PUBSUB_TOPIC"); ok {
+			return key, projectID, topicID, nil
+		}
+	}
+	// otherwise we're in CF environment
 	appEnv, err := cfenv.Current()
 	if err != nil {
 		return key, projectID, topicID, err
