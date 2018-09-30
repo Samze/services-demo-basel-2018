@@ -1,1 +1,12 @@
-body { background-color: #d8da3d }
+.flex {
+  display: flex;
+  flex-direction: row;
+}
+
+.col {
+  margin-left: unset !important;
+}
+
+.full-card {
+    height: 100%
+}
