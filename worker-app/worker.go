@@ -54,7 +54,7 @@ var processedIDsLock sync.Mutex
 func handleListMessages(s Storer) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "<!DOCTYPE html><title>Pubsub example</title>",
-			"<h1>Pubsub example</h1>",
+			"<h1>Worker</h1>",
 			"<p>Received messages:</p>",
 			"<ul>")
 

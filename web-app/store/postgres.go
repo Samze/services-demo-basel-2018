@@ -32,10 +32,6 @@ func NewStore(conn string) (*Store, error) {
 func (s *Store) createTables() error {
 	// temp drop everything while for testing
 	s.db.Query(`
-	DROP TABLE text
-	`)
-
-	s.db.Query(`
 	DROP TABLE images
 	`)
 
