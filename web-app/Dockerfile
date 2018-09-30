@@ -9,5 +9,7 @@ RUN go install -i
 
 FROM alpine:latest
 RUN apk add --no-cache ca-certificates
-COPY --from=0 /go/bin/web-app .
+COPY . /web-app
+WORKDIR /web-app
+COPY --from=0 /go/bin/web-app /web-app
 CMD ["./web-app"]

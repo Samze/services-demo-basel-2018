@@ -50,20 +50,3 @@ spec:
                 secretKeyRef:
                   name: postgresql-binding
                   key: uri
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: "web-app-service"
-  namespace: "default"
-  labels:
-    app: "web-app"
-spec:
-  selector:
-    app: "web-app"
-  ports:
-  - port: 80
-    targetPort: 8080
-  type: "LoadBalancer"
-
