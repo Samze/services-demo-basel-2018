@@ -128,7 +128,11 @@ func (s *Store) GetImages() ([]Image, error) {
 
 	var images []Image
 	for _, img := range processedImages {
-		images = append(images, convertImage(img))
+		img, err := convertImage(img)
+		if err != nil {
+			return nil, err
+		}
+		images = append(images, img)
 	}
 	return images, nil
 }
@@ -154,11 +158,11 @@ func (s *Store) getProcessedImages() ([]rawImage, error) {
 	return result, nil
 }
 
-func convertImage(img rawImage) Image {
+func convertImage(img rawImage) (Image, error) {
 	var classification Classification
 	err := json.Unmarshal([]byte(img.Classification), &classification)
 	if err != nil {
-		panic(err)
+		return Image{}, err
 	}
 
 	var classes []Class
@@ -169,5 +173,5 @@ func convertImage(img rawImage) Image {
 	return Image{
 		Img:     base64.StdEncoding.EncodeToString(img.Img),
 		Classes: classes,
-	}
+	}, nil
 }
