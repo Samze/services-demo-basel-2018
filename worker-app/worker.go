@@ -45,7 +45,7 @@ type Storer interface {
 }
 
 type Vision interface {
-	ClassifyImage(img []byte) ([]byte, error)
+	ClassifyImage(name string, img []byte) ([]byte, error)
 }
 
 var processedIDs []string
@@ -68,8 +68,8 @@ func handleListMessages(s Storer) func(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func processImg(img []byte, v Vision) []byte {
-	clasiffication, err := v.ClassifyImage(img)
+func processImg(name string, img []byte, v Vision) []byte {
+	clasiffication, err := v.ClassifyImage(name, img)
 
 	if err != nil {
 		log.Printf("Could not classify image %s", err)
@@ -148,8 +148,8 @@ func getSubscriber(projectID, subID string) (*pubsub.Subscription, error) {
 func receiveMessages(ctx context.Context, sub *pubsub.Subscription, s Storer, v Vision) {
 	err := sub.Receive(ctx, func(ctx context.Context, m *pubsub.Message) {
 		fmt.Printf("Got message ID=%s", m.ID)
-
-		imageClassification := processImg(m.Data, v)
+		imgName, _ := m.Attributes["filename"]
+		imageClassification := processImg(imgName, m.Data, v)
 
 		err := s.AddImage(m.Data, imageClassification)
 		if err != nil {

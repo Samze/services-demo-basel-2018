@@ -17,7 +17,7 @@ type Storer interface {
 }
 
 type Queuer interface {
-	PublishImage([]byte) error
+	PublishImage(string, []byte) error
 	Destroy()
 }
 
@@ -55,7 +55,7 @@ func main() {
 
 func postImageHandler(q Queuer) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		file, _, err := r.FormFile("image")
+		file, header, err := r.FormFile("image")
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to read img: %v", err), http.StatusInternalServerError)
 			return
@@ -68,7 +68,7 @@ func postImageHandler(q Queuer) func(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := q.PublishImage(imgBuf.Bytes()); err != nil {
+		if err := q.PublishImage(header.Filename, imgBuf.Bytes()); err != nil {
 			http.Error(w, fmt.Sprintf("Failed to publish img: %v", err), http.StatusInternalServerError)
 			return
 		}

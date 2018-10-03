@@ -32,11 +32,10 @@ func NewVision(uri, apiKey string) (*Vision, error) {
 	return &v, nil
 }
 
-func (v *Vision) ClassifyImage(img []byte) (classification []byte, err error) {
+func (v *Vision) ClassifyImage(name string, img []byte) (classification []byte, err error) {
 	buf := new(bytes.Buffer)
 	w := multipart.NewWriter(buf)
-	// TODO provide real name
-	image, err := w.CreateFormFile("images_file", "fruitbowl.jpg")
+	image, err := w.CreateFormFile("images_file", name)
 	if err != nil {
 		return classification, err
 	}
@@ -70,8 +69,4 @@ func (v *Vision) ClassifyImage(img []byte) (classification []byte, err error) {
 	}
 
 	return classification, nil
-}
-
-func (v *Vision) DetectFaces(img []byte) {
-	// TODO implement
 }

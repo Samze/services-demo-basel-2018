@@ -2,6 +2,7 @@
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 
+kubectl delete -f "$DIR/../k8s/service-web-app.yaml"
 kubectl delete -f "$DIR/../k8s/web-app.yaml"
 kubectl delete -f "$DIR/../k8s/worker-app.yaml"
 

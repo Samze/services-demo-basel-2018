@@ -31,9 +31,10 @@ func NewQueue(projectID, topicID string) (*Queue, error) {
 	return &Queue{topic}, nil
 }
 
-func (q *Queue) PublishImage(img []byte) error {
+func (q *Queue) PublishImage(name string, img []byte) error {
 	ctx := context.Background()
-	result := q.topic.Publish(ctx, &pubsub.Message{Data: img})
+	attrs := map[string]string{"filename": name}
+	result := q.topic.Publish(ctx, &pubsub.Message{Data: img, Attributes: attrs})
 	serverID, err := result.Get(ctx)
 	if err != nil {
 		return fmt.Errorf("Failed to publish: %v", err)
