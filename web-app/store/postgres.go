@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
-	"io/ioutil"
 
 	_ "github.com/lib/pq"
 )
@@ -38,57 +37,6 @@ func (s *Store) createTables() error {
 	_, err := s.db.Query(`
 	CREATE TABLE IF NOT EXISTS images (imgname text, img bytea, classification json)
 	`)
-	if err != nil {
-		return err
-	}
-
-	sqlStatement := `INSERT INTO images VALUES ($1, $2, $3)`
-
-	img, err := ioutil.ReadFile("osbapi.png")
-	if err != nil {
-		return err
-	}
-
-	_, err = s.db.Exec(sqlStatement, "imgname", img, `{
-	"images": [{
-		"classifiers": [{
-			"classifier_id": "default",
-			"name": "default",
-			"classes": [{
-				"class": "banana",
-				"score": 0.562,
-				"type_hierarchy": "/fruit/banana"
-			}, {
-				"class": "fruit",
-				"score": 0.788
-			}, {
-				"class": "diet (food)",
-				"score": 0.528,
-				"type_hierarchy": "/food/diet (food)"
-			}, {
-				"class": "food",
-				"score": 0.528
-			}, {
-				"class": "honeydew",
-				"score": 0.5,
-				"type_hierarchy": "/fruit/melon/honeydew"
-			}, {
-				"class": "melon",
-				"score": 0.501
-			}, {
-				"class": "olive color",
-				"score": 0.973
-			}, {
-				"class": "lemon yellow color",
-				"score": 0.789
-			}]
-		}],
-		"image": "fruitbowl.jpg"
-	}],
-	"images_processed": 1,
-	"custom_classes": 0
-}`)
-
 	if err != nil {
 		return err
 	}
