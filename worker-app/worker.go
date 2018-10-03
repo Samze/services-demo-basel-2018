@@ -48,23 +48,22 @@ type Vision interface {
 	ClassifyImage(name string, img []byte) ([]byte, error)
 }
 
-var processedIDs []string
-var processedIDsLock sync.Mutex
+var logs []string
+var logsLock sync.Mutex
 
 func handleListMessages(s Storer) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "<!DOCTYPE html><title>Pubsub example</title>",
 			"<h1>Worker</h1>",
-			"<p>Received messages:</p>",
+			"<p>Logs:</p>",
 			"<ul>")
 
-		processedIDsLock.Lock()
-		for _, id := range processedIDs {
-			fmt.Fprintln(w, "<li>", html.EscapeString(id))
+		logsLock.Lock()
+		for _, line := range logs {
+			fmt.Fprintln(w, "<li>", html.EscapeString(line))
 		}
-		processedIDsLock.Unlock()
+		logsLock.Unlock()
 		fmt.Fprint(w, "<ul>")
-
 	}
 }
 
@@ -147,20 +146,20 @@ func getSubscriber(projectID, subID string) (*pubsub.Subscription, error) {
 
 func receiveMessages(ctx context.Context, sub *pubsub.Subscription, s Storer, v Vision) {
 	err := sub.Receive(ctx, func(ctx context.Context, m *pubsub.Message) {
-		fmt.Printf("Got message ID=%s", m.ID)
+		writeLog(fmt.Sprintf("Recieved msg on queue with ID: %s", m.ID))
 		imgName, _ := m.Attributes["filename"]
+
+		writeLog("Classifying image")
 		imageClassification := processImg(imgName, m.Data, v)
 
+		writeLog(fmt.Sprintf("Storing img and classification in DB"))
 		err := s.AddImage(m.Data, imageClassification)
 		if err != nil {
 			log.Printf("Could not store text %+v", err)
 		}
-
-		processedIDsLock.Lock()
-		processedIDs = append(processedIDs, m.ID)
-		processedIDsLock.Unlock()
-
 		m.Ack()
+
+		writeLog(fmt.Sprintf("Finished processing msg with ID: %s", m.ID))
 	})
 
 	if err != nil {
@@ -287,4 +286,10 @@ func parseVisionEnv() (apiKey, url string, err error) {
 	}
 
 	return apiKey, url, nil
+}
+
+func writeLog(msg string) {
+	logsLock.Lock()
+	logs = append(logs, msg)
+	logsLock.Unlock()
 }
