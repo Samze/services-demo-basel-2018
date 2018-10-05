@@ -10,3 +10,12 @@
 .full-card {
     height: 100%
 }
+
+p {
+    font-size: 30px;
+  }
+
+label {
+        font-size: 30px;
+      }
+
