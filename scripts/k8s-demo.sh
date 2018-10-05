@@ -20,28 +20,33 @@
 #
 # see http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/bash-prompt-escape-sequences.html for escape sequences
 #
-DEMO_PROMPT="${GREEN}\h ➜ ${CYAN}\w "
+DEMO_PROMPT="${GREEN}\h ➜ ${CYAN}\W "
 
 # hide the evidence
 clear
 cd ~/go/src/github.com/Samze/services-demo-basel-2018 || return
 svcat unbind --name vision-binding --wait > /dev/null 2>&1
 svcat deprovision vision --wait > /dev/null 2>&1
-svcat delete -f k8s/web-app.yaml -f k8s/worker-app.yaml > /dev/null 2>&1
+kubectl delete -f k8s/web-app.yaml -f k8s/worker-app.yaml > /dev/null 2>&1
 # svcat unbind --name db-binding > /dev/null 2>&1
 
 
 # k8s demo
+pe "kubectl config view -o jsonpath='{.current-context}'"
+echo -e "\n"
 pe "svcat get classes"
-pe "clear"
 pe "svcat describe class watson-vision-combined"
+pe "clear"
 pe "svcat provision vision --class watson-vision-combined --plan standard-rc"
 pe "svcat describe instance vision"
+pe "clear"
 pe "svcat bind vision --name vision-binding"
 pe "svcat describe binding vision-binding --show-secrets"
+pe "clear"
 pe "svcat get instances"
 pe "svcat get bindings"
 pe "vim k8s/worker-app.yaml"
+pe "clear"
 pe "kubectl create -f k8s/worker-app.yaml -f k8s/web-app.yaml"
 pe "kubectl get deployments"
 pe "kubectl get services --field-selector metadata.name=web-app-service"
