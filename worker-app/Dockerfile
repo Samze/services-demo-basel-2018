@@ -3,7 +3,8 @@ RUN apk add --no-cache git
 RUN go get -u github.com/cloudfoundry-community/go-cfenv
 RUN go get -u github.com/lib/pq
 RUN go get -u cloud.google.com/go/pubsub
-ADD . /go/src/github.com/Samze/services-demo-basel-2018/worker-app
+ADD ./worker-app /go/src/github.com/Samze/services-demo-basel-2018/worker-app
+ADD ./config /go/src/github.com/Samze/services-demo-basel-2018/config
 WORKDIR /go/src/github.com/Samze/services-demo-basel-2018/worker-app
 RUN go install -i
 

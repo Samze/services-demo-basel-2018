@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/Samze/services-demo-basel-2018/config"
 	"github.com/Samze/services-demo-basel-2018/web-app/queue"
 	"github.com/Samze/services-demo-basel-2018/web-app/store"
 )
@@ -21,13 +22,8 @@ type Queuer interface {
 	Destroy()
 }
 
-const (
-	port                 = "8080"
-	googleAppCredentials = "GOOGLE_APPLICATION_CREDENTIALS"
-)
-
 func main() {
-	c, err := NewConfig()
+	c, err := config.NewWebConfig()
 	if err != nil {
 		log.Fatalf("could not load config %+v", err)
 	}
@@ -49,8 +45,8 @@ func main() {
 	http.Handle("/css/", http.StripPrefix("/css/", http.FileServer(http.Dir("./css"))))
 	http.HandleFunc("/", getHandler(store))
 
-	fmt.Println("Listening on port:", port)
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", port), nil))
+	fmt.Println("Listening on port:", config.Port)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%v", config.Port), nil))
 }
 
 func postImageHandler(q Queuer) func(w http.ResponseWriter, r *http.Request) {
