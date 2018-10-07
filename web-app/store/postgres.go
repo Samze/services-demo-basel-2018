@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 
 	_ "github.com/lib/pq"
 )
@@ -111,6 +112,12 @@ func convertImage(img rawImage) (Image, error) {
 	err := json.Unmarshal([]byte(img.Classification), &classification)
 	if err != nil {
 		return Image{}, err
+	}
+
+	if len(classification.Images) == 0 ||
+		len(classification.Images[0].Classifiers) == 0 ||
+		len(classification.Images[0].Classifiers[0].Classes) == 0 {
+		return Image{}, fmt.Errorf("Oops No vision classifications sent: %+v", img.Classification)
 	}
 
 	var classes []Class
