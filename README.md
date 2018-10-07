@@ -11,7 +11,7 @@ them on a shared database instance. The web app then reads these processed image
  
 We have chosen to use services from Google, Azure and IBM Cloud.
 
-![](./assets/arch.png)
+![](./assets/arch_clouds.png)
 
 ### Setup
 
