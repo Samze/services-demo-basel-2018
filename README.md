@@ -25,7 +25,7 @@ docker build -t servicesapi/worker-app:latest . -f worker-app/Dockerfile
 #### Broker setup
 
 To enable the services in the marketplace we pushed three CF apps that allow access to the cloud
-markplaces.
+providers.
 * [Google Cloud Platform proxy](https://github.com/cloudfoundry-incubator/gcp-broker-proxy)
 * [IBM Cloud proxy](https://github.com/georgi-lozev/cf-broker-proxy)
 * [Azure broker](https://github.com/Azure/open-service-broker-azure)
