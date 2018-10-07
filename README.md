@@ -9,11 +9,9 @@ The application consists of a web and worker app. The web app sends images to th
 over a message queue. The worker app uses a backing vision service to process the image and then stores
 them on a shared database instance. The web app then reads these processed images for display back to the user.
  
-![](./assets/arch.png)
-
 We have chosen to use services from Google, Azure and IBM Cloud.
 
-![](./assets/arch2.png)
+![](./assets/arch.png)
 
 ### Setup
 
