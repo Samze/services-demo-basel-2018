@@ -23,15 +23,15 @@ create_service_if_not_present() {
   fi
 }
 
-create_service_if_not_present watson-vision-combined lite vision
+create_service_if_not_present watson-vision-combined standard-rc vision
 create_service_if_not_present cloud-pubsub beta pubsub -c '{"topicId": "cf_topic"}'
-create_service_if_not_present azure-postgresql-9-6 basic postgresql -c '{ "resourceGroup" : "basel2018", "location" : "uksouth", "firewallRules" : [ { "name": "AllowAll", "startIPAddress": "0.0.0.0", "endIPAddress" : "255.255.255.255" } ] }'
+create_service_if_not_present azure-postgresql-9-6 basic postgresql -c '{ "resourceGroup" : "kubeCon2018", "location" : "westus", "firewallRules" : [ { "name": "AllowAll", "startIPAddress": "0.0.0.0", "endIPAddress" : "255.255.255.255" } ] }'
 
 pushd web-app
   make build-linux
   cf push web-app --no-start
 
-  cf bind-service web-app pubsub -c '{"createServiceAccount": true, "roles": ["roles/pubsub.publisher", "roles/pubsub.viewer"], "serviceAccount": "pubsub-test-publisher" }'
+  cf bind-service web-app pubsub -c '{"createServiceAccount": true, "roles": ["roles/pubsub.publisher", "roles/pubsub.viewer"], "serviceAccount": "kubecon-cf-pub" }'
   wait_on_bind_completion web-app
 
   cf bind-service web-app postgresql
@@ -43,7 +43,7 @@ pushd worker-app
   make build-linux
   cf push worker-app --no-start
 
-  cf bind-service worker-app pubsub -c '{"createServiceAccount": true, "serviceAccount": "pubsub-test-subscriber", "subscription": {"subscriptionId": "subscription"}, "roles":["roles/pubsub.subscriber", "roles/pubsub.viewer"]}'
+  cf bind-service worker-app pubsub -c '{"createServiceAccount": true, "serviceAccount": "kubecon-cf-sub", "subscription": {"subscriptionId": "subscription"}, "roles":["roles/pubsub.subscriber", "roles/pubsub.viewer"]}'
   wait_on_bind_completion worker-app
 
   cf bind-service worker-app postgresql

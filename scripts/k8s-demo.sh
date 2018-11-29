@@ -32,15 +32,14 @@ kubectl delete -f k8s/web-app.yaml -f k8s/worker-app.yaml > /dev/null 2>&1
 
 
 # k8s demo
-pe "kubectl config view -o jsonpath='{.current-context}'"
-echo -e "\n"
-pe "svcat get classes"
+# pe "kubectl config view -o jsonpath='{.current-context}'"
+pe "kubectl config current-context"
+pe "svcat get classes | less"
 pe "svcat describe class watson-vision-combined"
-pe "clear"
 pe "svcat provision vision --class watson-vision-combined --plan standard-rc"
 pe "svcat describe instance vision"
 pe "svcat bind vision --name vision-binding"
-pe "svcat describe binding vision-binding --show-secrets"
+pe "svcat describe binding vision-binding --show-secrets | less"
 pe "svcat get instances"
 pe "svcat get bindings"
 pe "vim k8s/worker-app.yaml"
